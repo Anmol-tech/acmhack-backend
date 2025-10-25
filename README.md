@@ -9,7 +9,7 @@ This pipeline:
 2. **Enriches** locations with weather data (Open-Meteo API)
 3. **Synthesizes** risk events based on crash history and weather
 4. **Builds** audio generation recipes for 4 risk types
-5. **Generates** WAV training files using SageMaker Processing
+5. **Generates** WAV audio files (with optional Bedrock AI enhancement)
 
 ## Architecture
 
@@ -22,7 +22,7 @@ data_pipeline/
 └── s3_utils.py            # S3 operations (region-agnostic)
 
 processing/
-└── augment.py             # SageMaker processing script
+└── bedrock_audio_generator.py  # Generate AI-enhanced WAV files (Bedrock + synthesis)
 
 notebooks/
 └── 01_build_training_data.ipynb  # Orchestration notebook
@@ -59,9 +59,16 @@ acousticshield-raw/
 
 acousticshield-ml/
 └── train/
-    ├── evt_00001_normal.wav
-    ├── evt_00002_tireskid.wav
-    └── ...
+    ├── Normal/
+    │   ├── evt_00001_normal.wav
+    │   └── ...
+    ├── TireSkid/
+    │   ├── evt_00026_tireskid.wav
+    │   └── ...
+    ├── EmergencyBraking/
+    │   └── ...
+    └── CollisionImminent/
+        └── ...
 ```
 
 ## Usage
@@ -88,40 +95,69 @@ The notebook will:
 - Generate risk events
 - Create audio recipes
 - Launch SageMaker processing job
-- Generate WAV files in S3
+- Generate WAV audio files in S3
 
 ### 4. Verify Outputs
 
 The pipeline will output:
 - Risk events JSON: `s3://acousticshield-raw/risk_events/`
 - Audio recipes JSON: `s3://acousticshield-raw/prompts/`
-- Training WAV files: `s3://acousticshield-ml/train/`
+- Training WAV files: `s3://acousticshield-ml/train/{RiskType}/`
 
 ## SageMaker Processing Job
 
 Uses PyTorch CPU container:
 - Instance: `ml.m5.xlarge`
-- Image: `pytorch-training:2.0.1-cpu-py310`
-- Script: `processing/augment.py`
+- Image: `pytorch-training:2.0.0-cpu-py310`
+- Script: `processing/bedrock_audio_generator.py`
 
 The processing job:
 1. Reads recipe JSON from S3
-2. Generates synthetic audio (5 seconds per event)
-3. Applies audio parameters (engine, tire noise, alerts)
-4. Writes WAV files to S3
+2. **Uses Bedrock AI** to analyze scenario and optimize parameters
+3. Generates WAV audio files (16-bit PCM, 22.05kHz)
+4. Writes AI-enhanced WAV files to S3 (organized by risk type)
 
-## Audio Generation
+## AI-Enhanced Audio Generation
 
-Each audio file contains:
-- **Ambient noise**: Pink noise based on weather
-- **Engine sound**: Low-frequency rumble (40-80 Hz)
-- **Tire noise**: Road friction sounds (intensifies for skids)
-- **Alert sounds**: Beeping warnings (800-1200 Hz)
+**Default mode uses Bedrock AI for intelligent audio synthesis:**
 
-Parameters are dynamically adjusted based on:
-- Risk type (Normal → CollisionImminent)
-- Weather conditions (rain, wind, temperature)
-- Time of day (morning, afternoon, evening, night)
+### How It Works
+1. **Bedrock Claude** analyzes scenario context:
+   - Risk level (Normal → CollisionImminent)
+   - Collision type (Head-On, Rear End, Sideswipe, etc.)
+   - Road conditions (wet, icy, dry)
+   
+2. **AI optimizes parameters** intelligently:
+   - Engine intensity (0.0-1.0)
+   - Tire noise levels (normal vs skid)
+   - Alert urgency (beep frequency/intensity)
+   - Ambient levels
+
+3. **Local synthesis** generates WAV:
+   - Pink noise for ambient
+   - 40-80 Hz engine rumble
+   - Tire/road friction sounds
+   - 800-1200 Hz warning beeps
+
+### Output Format
+- **Format**: 16-bit PCM WAV
+- **Sample Rate**: 22.05 kHz
+- **Duration**: 5 seconds per event
+- **Channels**: Mono
+
+### Fast Mode (Optional)
+To disable AI enhancement for faster generation:
+```python
+arguments=['--region', REGION, '--no-ai']  # Disable AI, use base parameters
+```
+
+### Why This Approach?
+
+**Bedrock can't generate audio directly** (it's an LLM service), but we use it brilliantly:
+- ✅ AI analyzes context and optimizes parameters
+- ✅ Local synthesis creates actual WAV files
+- ✅ Best of both: AI intelligence + guaranteed WAV output
+- ✅ No dependency on external text-to-audio models
 
 ## Region Handling
 
@@ -146,68 +182,19 @@ All components are **region-agnostic**:
 
 Required roles:
 - `role-sagemaker-processing`: SageMaker execution role
-  - S3 read/write access
-  - CloudWatch logs access
-
-## Output Format
-
-### Risk Event JSON
-```json
-{
-  "event_id": "evt_00001",
-  "risk_type": "TireSkid",
-  "risk_score": 65.5,
-  "road_name": "Main St",
-  "weather_risk": "high",
-  "time_category": "evening"
-}
-```
-
-### Audio Recipe JSON
-```json
-{
-  "recipe_id": "recipe_evt_00001",
-  "risk_type": "TireSkid",
-  "audio_parameters": {
-    "ambient_level": 0.4,
-    "engine_intensity": 0.7,
-    "tire_noise": 0.9,
-    "alert_level": 0.4,
-    "duration_seconds": 5.0,
-    "sample_rate": 22050
-  },
-  "output": {
-    "filename": "evt_00001_tireskid.wav"
-  }
-}
-```
-
-## Troubleshooting
-
-### Import Errors
-Ensure all dependencies are installed:
-```bash
-pip install -r requirements.txt
-```
-
-### S3 Access Errors
-Check AWS credentials and IAM permissions:
-```bash
-aws sts get-caller-identity
-```
-
-### SageMaker Job Failures
-Check CloudWatch logs in AWS Console:
-- Navigate to SageMaker → Processing Jobs
-- Click on failed job → View logs
+  - S3 read/write access (s3:GetObject, s3:PutObject)
+  - CloudWatch logs access (logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents)
+  - **Bedrock invoke model permissions** (`bedrock:InvokeModel` on `anthropic.claude-3-sonnet-20240229-v1:0`)
 
 ## Next Steps
 
 After pipeline completion:
-1. Validate WAV file quality
-2. Build audio classification model
-3. Train on generated dataset
-4. Deploy for real-time inference
+1. **Review AI-enhanced WAV files**: Download and listen to generated audio samples
+2. **Verify quality**: Check that risk types sound appropriately different (AI should make them more distinct)
+3. **Analyze distribution**: Ensure balanced dataset across 4 risk types
+4. **Build classifier**: Train audio classification model (CNN, LSTM, or Transformer)
+5. **Train & validate**: Use generated dataset with train/val/test split
+6. **Deploy model**: Real-time vehicle safety inference in production
 
 ## License
 

@@ -1,4 +1,15 @@
 """
+⚠️ DEPRECATED - This file is no longer used ⚠️
+
+Use bedrock_audio_generator.py instead, which provides:
+- AI-enhanced audio parameter optimization using AWS Bedrock
+- Same WAV output format
+- Better quality and more realistic audio
+
+This file is kept for reference only.
+
+---
+
 SageMaker Processing script for audio data augmentation.
 Generates WAV files from audio recipes using synthetic audio generation.
 """
