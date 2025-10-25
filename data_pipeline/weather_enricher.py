@@ -104,7 +104,7 @@ class WeatherEnricher:
             lat = hotspot.get('latitude', 0)
             lon = hotspot.get('longitude', 0)
             
-            logger.info(f"Fetching weather for hotspot {idx}/{len(hotspots)}: {hotspot.get('road_name')}")
+            logger.info(f"Fetching weather for hotspot {idx}/{len(hotspots)}: {hotspot.get('location_name')}")
             
             weather = self.fetch_weather(lat, lon)
             
