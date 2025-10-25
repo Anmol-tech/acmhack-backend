@@ -31,51 +31,80 @@ class HotspotExtractor:
             geom = feature.get('geometry', {})
             coords = geom.get('coordinates', [0, 0])
             
-            # Extract all available properties with fallbacks
+            # Helper function to safely get and strip string values
+            def get_str(key: str, default: str = '') -> str:
+                val = props.get(key)
+                return val.strip() if val and isinstance(val, str) else default
+            
+            # Helper function to safely get integer values
+            def get_int(key: str, default: int = 0) -> int:
+                val = props.get(key)
+                if val is None or val == '':
+                    return default
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    return default
+            
+            # Helper function to safely get float values
+            def get_float(key: str, default: float = 0.0) -> float:
+                val = props.get(key)
+                if val is None or val == '':
+                    return default
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+            
+            # Extract all available properties with proper data types
             record = {
-                # Location
-                'latitude': coords[1] if len(coords) >= 2 else 0,
-                'longitude': coords[0] if len(coords) >= 2 else 0,
-                'street_a': (props.get('INTASTREETNAME') or '').strip(),
-                'street_b': (props.get('INTBSTREETNAME') or '').strip(),
+                # Location (Double/Float)
+                'latitude': get_float('LATITUDE', coords[1] if len(coords) >= 2 else 0),
+                'longitude': get_float('LONGITUDE', coords[0] if len(coords) >= 2 else 0),
+                'street_a': get_str('INTASTREETNAME'),
+                'street_b': get_str('INTBSTREETNAME'),
                 
                 # Crash characteristics
-                'collision_type': (props.get('COLLISIONTYPE') or 'Unknown').strip(),
-                'primary_factor': (props.get('PRIMARYCOLLISIONFACTOR') or 'Unknown').strip(),
-                'vehicle_count': int(props.get('VEHICLECOUNT') or 0),
-                'narrative': (props.get('NARRATIVE') or '').strip(),
+                'collision_type': get_str('COLLISIONTYPE', 'Unknown'),
+                'primary_factor': get_str('PRIMARYCOLLISIONFACTOR', 'Unknown'),
+                'vehicle_count': get_int('VEHICLECOUNT'),
+                'narrative': get_str('NARRATIVE'),
                 
-                # Environmental conditions
-                'weather': (props.get('WEATHER') or 'Clear').strip(),
-                'lighting': (props.get('LIGHTING') or 'Daylight').strip(),
-                'road_surface': (props.get('ROADWAYSURFACE') or 'Dry').strip(),
-                'road_condition': (props.get('ROADWAYCONDITION') or 'No Unusual Conditions').strip(),
+                # Environmental conditions (String)
+                'weather': get_str('WEATHER', 'Clear'),
+                'lighting': get_str('LIGHTING', 'Daylight'),
+                'road_surface': get_str('ROADWAYSURFACE', 'Dry'),
+                'road_condition': get_str('ROADWAYCONDITION', 'No Unusual Conditions'),
                 
-                # Injuries and severity
-                'minor_injuries': int(props.get('MINORINJURIES') or 0),
-                'moderate_injuries': int(props.get('MODERATEINJURIES') or 0),
-                'severe_injuries': int(props.get('SEVEREINJURIES') or 0),
-                'fatal_injuries': int(props.get('FATALINJURIES') or 0),
+                # Injuries and severity (Integer)
+                'minor_injuries': get_int('MINORINJURIES'),
+                'moderate_injuries': get_int('MODERATEINJURIES'),
+                'severe_injuries': get_int('SEVEREINJURIES'),
+                'fatal_injuries': get_int('FATALINJURIES'),
                 
-                # Flags and violations
-                'speeding_flag': (props.get('SPEEDINGFLAG') or '').strip(),
-                'hit_and_run_flag': (props.get('HITANDRUNFLAG') or '').strip(),
-                'driver_intoxicated': (props.get('VEHICLEDRIVERINTOXICATED') or '').strip(),
+                # Flags and violations (String - Y/N or blank)
+                'speeding_flag': get_str('SPEEDINGFLAG'),
+                'hit_and_run_flag': get_str('HITANDRUNFLAG'),
+                'driver_intoxicated': get_str('VEHICLEDRIVERINTOXICATED'),
                 
                 # Temporal data
-                'hour': int(props.get('HOUR') or 12),
-                'day_of_week': (props.get('DAYOFWEEKNAME') or '').strip(),
-                'month': (props.get('MONTHNAME') or '').strip(),
-                'year': int(props.get('YEAR') or 2020),
+                'hour': get_int('HOUR', 12),
+                'day_of_week': get_str('DAYOFWEEKNAME'),
+                'month': get_str('MONTHNAME'),
+                'year': get_int('YEAR', 2020),
                 
-                # Infrastructure
-                'intersection_type': (props.get('INTERSECTIONTYPE') or '').strip(),
-                'traffic_control': (props.get('TRAFFICCONTROL') or 'No Controls Present').strip(),
-                'traffic_control_type': (props.get('INTTRAFFICCONTROLTYPE') or '').strip(),
+                # Infrastructure (String)
+                'intersection_type': get_str('INTERSECTIONTYPE'),
+                'traffic_control': get_str('TRAFFICCONTROL', 'No Controls Present'),
+                'traffic_control_type': get_str('INTTRAFFICCONTROLTYPE'),
                 
-                # Additional context
-                'vehicle_damage': (props.get('VEHICLEDAMAGE') or '').strip(),
-                'pedestrian_action': (props.get('PEDESTRIANACTION') or 'No Pedestrians Involved').strip(),
+                # Additional context (String)
+                'vehicle_damage': get_str('VEHICLEDAMAGE'),
+                'pedestrian_action': get_str('PEDESTRIANACTION', 'No Pedestrians Involved'),
+                
+                # Numeric identifiers (Integer)
+                'intersection_number': get_int('INTERSECTIONNUMBERINT'),
+                'object_id': get_int('OBJECTID'),
             }
             records.append(record)
         return records
