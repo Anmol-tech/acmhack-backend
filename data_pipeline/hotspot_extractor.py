@@ -36,46 +36,46 @@ class HotspotExtractor:
                 # Location
                 'latitude': coords[1] if len(coords) >= 2 else 0,
                 'longitude': coords[0] if len(coords) >= 2 else 0,
-                'street_a': props.get('INTASTREETNAME', props.get('street_name', '')).strip(),
-                'street_b': props.get('INTBSTREETNAME', props.get('street_b', '')).strip(),
+                'street_a': (props.get('INTASTREETNAME') or props.get('street_name') or '').strip(),
+                'street_b': (props.get('INTBSTREETNAME') or props.get('street_b') or '').strip(),
                 
                 # Crash characteristics
-                'collision_type': props.get('COLLISIONTYPE', props.get('collision_type', 'Unknown')).strip(),
-                'primary_factor': props.get('PRIMARYCOLLISIONFACTOR', props.get('primary_factor', 'Unknown')).strip(),
-                'vehicle_count': int(props.get('VEHICLECOUNT', props.get('vehicle_count', 0)) or 0),
-                'narrative': props.get('NARRATIVE', props.get('narrative', '')).strip(),
+                'collision_type': (props.get('COLLISIONTYPE') or props.get('collision_type') or 'Unknown').strip(),
+                'primary_factor': (props.get('PRIMARYCOLLISIONFACTOR') or props.get('primary_factor') or 'Unknown').strip(),
+                'vehicle_count': int(props.get('VEHICLECOUNT') or props.get('vehicle_count') or 0),
+                'narrative': (props.get('NARRATIVE') or props.get('narrative') or '').strip(),
                 
                 # Environmental conditions
-                'weather': props.get('WEATHER', props.get('weather', 'Clear')).strip(),
-                'lighting': props.get('LIGHTING', props.get('lighting', 'Daylight')).strip(),
-                'road_surface': props.get('ROADWAYSURFACE', props.get('road_surface', 'Dry')).strip(),
-                'road_condition': props.get('ROADWAYCONDITION', props.get('road_condition', 'No Unusual Conditions')).strip(),
+                'weather': (props.get('WEATHER') or props.get('weather') or 'Clear').strip(),
+                'lighting': (props.get('LIGHTING') or props.get('lighting') or 'Daylight').strip(),
+                'road_surface': (props.get('ROADWAYSURFACE') or props.get('road_surface') or 'Dry').strip(),
+                'road_condition': (props.get('ROADWAYCONDITION') or props.get('road_condition') or 'No Unusual Conditions').strip(),
                 
                 # Injuries and severity
-                'minor_injuries': int(props.get('MINORINJURIES', props.get('minor_injuries', 0)) or 0),
-                'moderate_injuries': int(props.get('MODERATEINJURIES', props.get('moderate_injuries', 0)) or 0),
-                'severe_injuries': int(props.get('SEVEREINJURIES', props.get('severe_injuries', 0)) or 0),
-                'fatal_injuries': int(props.get('FATALINJURIES', props.get('fatal_injuries', 0)) or 0),
+                'minor_injuries': int(props.get('MINORINJURIES') or props.get('minor_injuries') or 0),
+                'moderate_injuries': int(props.get('MODERATEINJURIES') or props.get('moderate_injuries') or 0),
+                'severe_injuries': int(props.get('SEVEREINJURIES') or props.get('severe_injuries') or 0),
+                'fatal_injuries': int(props.get('FATALINJURIES') or props.get('fatal_injuries') or 0),
                 
                 # Flags and violations
-                'speeding_flag': props.get('SPEEDINGFLAG', props.get('speeding_flag', '')).strip(),
-                'hit_and_run_flag': props.get('HITANDRUNFLAG', props.get('hit_and_run_flag', '')).strip(),
-                'driver_intoxicated': props.get('VEHICLEDRIVERINTOXICATED', props.get('driver_intoxicated', '')).strip(),
+                'speeding_flag': (props.get('SPEEDINGFLAG') or props.get('speeding_flag') or '').strip(),
+                'hit_and_run_flag': (props.get('HITANDRUNFLAG') or props.get('hit_and_run_flag') or '').strip(),
+                'driver_intoxicated': (props.get('VEHICLEDRIVERINTOXICATED') or props.get('driver_intoxicated') or '').strip(),
                 
                 # Temporal data
-                'hour': int(props.get('HOUR', props.get('hour', 12)) or 12),
-                'day_of_week': props.get('DAYOFWEEKNAME', props.get('day_of_week', '')).strip(),
-                'month': props.get('MONTHNAME', props.get('month', '')).strip(),
-                'year': int(props.get('YEAR', props.get('year', 2020)) or 2020),
+                'hour': int(props.get('HOUR') or props.get('hour') or 12),
+                'day_of_week': (props.get('DAYOFWEEKNAME') or props.get('day_of_week') or '').strip(),
+                'month': (props.get('MONTHNAME') or props.get('month') or '').strip(),
+                'year': int(props.get('YEAR') or props.get('year') or 2020),
                 
                 # Infrastructure
-                'intersection_type': props.get('INTERSECTIONTYPE', props.get('intersection_type', '')).strip(),
-                'traffic_control': props.get('TRAFFICCONTROL', props.get('traffic_control', 'No Controls Present')).strip(),
-                'traffic_control_type': props.get('INTTRAFFICCONTROLTYPE', props.get('traffic_control_type', '')).strip(),
+                'intersection_type': (props.get('INTERSECTIONTYPE') or props.get('intersection_type') or '').strip(),
+                'traffic_control': (props.get('TRAFFICCONTROL') or props.get('traffic_control') or 'No Controls Present').strip(),
+                'traffic_control_type': (props.get('INTTRAFFICCONTROLTYPE') or props.get('traffic_control_type') or '').strip(),
                 
                 # Additional context
-                'vehicle_damage': props.get('VEHICLEDAMAGE', props.get('vehicle_damage', '')).strip(),
-                'pedestrian_action': props.get('PEDESTRIANACTION', props.get('pedestrian_action', 'No Pedestrians Involved')).strip(),
+                'vehicle_damage': (props.get('VEHICLEDAMAGE') or props.get('vehicle_damage') or '').strip(),
+                'pedestrian_action': (props.get('PEDESTRIANACTION') or props.get('pedestrian_action') or 'No Pedestrians Involved').strip(),
             }
             records.append(record)
         return records
