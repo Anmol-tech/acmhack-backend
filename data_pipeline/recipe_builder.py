@@ -71,7 +71,7 @@ class RecipeBuilder:
         return recipes
     
     def _create_recipe(self, event: Dict) -> Dict:
-        """Create a single audio recipe from a risk event."""
+        """Create a single audio recipe from a risk event with enhanced parameters."""
         risk_type = event.get('risk_type', 'Normal')
         audio_spec = self.AUDIO_SPECS.get(risk_type, self.AUDIO_SPECS['Normal']).copy()
         
@@ -89,7 +89,17 @@ class RecipeBuilder:
             audio_spec['tire_noise'] = min(audio_spec['tire_noise'] * 1.2, 1.0)
             audio_spec['ambient_level'] = min(audio_spec['ambient_level'] * 1.3, 1.0)
         
-        # Build recipe
+        # Adjust based on crash characteristics
+        crash_chars = event.get('crash_characteristics', {})
+        collision_type = crash_chars.get('collision_type', 'Unknown')
+        
+        # Collision-type specific adjustments
+        if collision_type in ['Head-On', 'Broadside']:
+            audio_spec['alert_level'] = min(audio_spec['alert_level'] * 1.3, 1.0)
+        elif 'Rear End' in collision_type:
+            audio_spec['engine_intensity'] = min(audio_spec['engine_intensity'] * 1.2, 1.0)
+        
+        # Build recipe with folder structure
         recipe = {
             'event_id': event.get('event_id'),
             'recipe_id': f"recipe_{event.get('event_id')}",
@@ -97,20 +107,27 @@ class RecipeBuilder:
             'risk_score': event.get('risk_score', 50),
             'audio_parameters': audio_spec,
             'context': {
-                'road_name': event.get('road_name'),
+                'location_name': event.get('location_name'),
                 'time_category': event.get('time_category'),
                 'weather_risk': weather_risk,
-                'weather_conditions': weather_conditions
+                'weather_conditions': weather_conditions,
+                'collision_type': collision_type,
+                'primary_factor': crash_chars.get('primary_factor', 'Unknown'),
+                'road_condition': crash_chars.get('road_condition', 'Dry'),
             },
             'output': {
                 'filename': f"{event.get('event_id')}_{risk_type.lower()}.wav",
+                'folder': risk_type,  # Organize by risk type folder
                 'format': 'wav',
                 'channels': 1
             },
             'metadata': {
                 'source_event': event.get('event_id'),
                 'hotspot_rank': event.get('hotspot_rank'),
-                'crash_count': event.get('crash_count')
+                'crash_count': event.get('crash_count'),
+                'severity_score': event.get('severity_score', 0),
+                'total_injuries': crash_chars.get('total_injuries', 0),
+                'total_fatalities': crash_chars.get('total_fatalities', 0),
             }
         }
         

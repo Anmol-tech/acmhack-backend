@@ -159,9 +159,14 @@ def load_recipes(recipe_dir: str) -> List[Dict]:
 
 
 def generate_wav_files(recipes: List[Dict], output_dir: str):
-    """Generate WAV files from recipes."""
+    """Generate WAV files from recipes, organized by risk type folders."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Create folders for each risk type
+    risk_types = ['Normal', 'TireSkid', 'EmergencyBraking', 'CollisionImminent']
+    for risk_type in risk_types:
+        (output_path / risk_type).mkdir(exist_ok=True)
     
     generator = AudioGenerator()
     successful = 0
@@ -172,10 +177,15 @@ def generate_wav_files(recipes: List[Dict], output_dir: str):
             # Generate audio
             audio = generator.generate_audio(recipe)
             
-            # Get output filename
+            # Get output information
             output_info = recipe.get('output', {})
             filename = output_info.get('filename', f'audio_{idx:05d}.wav')
-            output_file = output_path / filename
+            folder = output_info.get('folder', 'Normal')  # Get risk type folder
+            
+            # Create path with folder structure
+            risk_folder = output_path / folder
+            risk_folder.mkdir(exist_ok=True)
+            output_file = risk_folder / filename
             
             # Get sample rate
             sample_rate = recipe.get('audio_parameters', {}).get('sample_rate', 22050)
@@ -196,6 +206,11 @@ def generate_wav_files(recipes: List[Dict], output_dir: str):
             failed += 1
     
     logger.info(f"Audio generation complete: {successful} successful, {failed} failed")
+    
+    # Log file distribution by risk type
+    for risk_type in risk_types:
+        count = len(list((output_path / risk_type).glob('*.wav')))
+        logger.info(f"  {risk_type}: {count} files")
 
 
 def main():

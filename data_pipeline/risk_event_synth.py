@@ -69,9 +69,12 @@ class RiskEventSynthesizer:
     
     def _create_event(self, event_id: int, hotspot: Dict, 
                      weather: Dict, weather_risk: str) -> Dict:
-        """Create a single risk event."""
-        # Select risk type with weighted probability based on weather
-        risk_type = self._select_risk_type(weather_risk)
+        """Create a single risk event with enhanced metadata."""
+        # Select risk type with weighted probability based on weather and crash history
+        crash_severity = hotspot.get('severity_score', 0)
+        collision_type = hotspot.get('most_common_collision_type', 'Unknown')
+        
+        risk_type = self._select_risk_type(weather_risk, collision_type, crash_severity)
         
         # Generate temporal context
         time_category = random.choice(self.TIME_CATEGORIES)
@@ -79,22 +82,32 @@ class RiskEventSynthesizer:
         
         # Calculate risk score (0-100)
         risk_score = self._calculate_risk_score(
-            risk_type, weather_risk, hotspot.get('crash_count', 1)
+            risk_type, weather_risk, hotspot.get('crash_count', 1), crash_severity
         )
         
-        # Build event
+        # Build event with rich metadata
         event = {
             'event_id': f"evt_{event_id:05d}",
             'hotspot_rank': hotspot.get('rank', 0),
-            'road_name': hotspot.get('road_name', 'Unknown'),
+            'location_name': hotspot.get('location_name', 'Unknown'),
             'latitude': hotspot.get('latitude', 0),
             'longitude': hotspot.get('longitude', 0),
             'crash_count': hotspot.get('crash_count', 0),
             'risk_type': risk_type,
             'risk_score': risk_score,
+            'severity_score': crash_severity,
             'time_category': time_category,
             'timestamp': timestamp,
             'weather_risk': weather_risk,
+            'crash_characteristics': {
+                'collision_type': collision_type,
+                'primary_factor': hotspot.get('primary_factor', 'Unknown'),
+                'road_condition': hotspot.get('most_common_road_condition', 'Dry'),
+                'lighting': hotspot.get('most_common_lighting', 'Daylight'),
+                'total_injuries': hotspot.get('total_injuries', 0),
+                'total_fatalities': hotspot.get('total_fatalities', 0),
+                'speeding_rate': hotspot.get('speeding_rate', 0),
+            },
             'weather_conditions': {
                 'temperature_c': weather.get('temperature_c', 20),
                 'rain_mm': weather.get('rain_mm', 0),
@@ -103,22 +116,43 @@ class RiskEventSynthesizer:
             },
             'metadata': {
                 'created_at': datetime.now().isoformat(),
-                'source': 'synthetic'
+                'source': 'synthetic',
+                'data_version': '2.0'
             }
         }
         
         return event
     
-    def _select_risk_type(self, weather_risk: str) -> str:
-        """Select risk type based on weather conditions."""
+    def _select_risk_type(self, weather_risk: str, collision_type: str = 'Unknown', 
+                         severity: float = 0) -> str:
+        """Select risk type based on weather, collision type, and severity."""
+        # Base weights
         if weather_risk == 'high':
-            # Higher probability of severe events in bad weather
-            weights = [0.1, 0.3, 0.35, 0.25]  # Normal, TireSkid, EmergencyBraking, CollisionImminent
+            weights = [0.1, 0.3, 0.35, 0.25]
         elif weather_risk == 'medium':
             weights = [0.3, 0.3, 0.25, 0.15]
         else:
-            # Good weather - mostly normal, some precautionary
             weights = [0.5, 0.25, 0.15, 0.1]
+        
+        # Adjust based on collision type
+        if collision_type in ['Head-On', 'Broadside']:
+            # More severe collision types - increase higher risk categories
+            weights[2] *= 1.3  # EmergencyBraking
+            weights[3] *= 1.5  # CollisionImminent
+        elif collision_type == 'Rear End':
+            # Common in sudden stops
+            weights[2] *= 1.2  # EmergencyBraking
+        elif collision_type in ['Sideswipe', 'Hit Object']:
+            # Often involves loss of control
+            weights[1] *= 1.3  # TireSkid
+        
+        # Adjust based on severity score
+        if severity > 200:
+            weights[3] *= 1.3  # High severity area
+        
+        # Normalize weights
+        total = sum(weights)
+        weights = [w / total for w in weights]
         
         return random.choices(self.RISK_TYPES, weights=weights)[0]
     
@@ -136,8 +170,8 @@ class RiskEventSynthesizer:
             return 'low'
     
     def _calculate_risk_score(self, risk_type: str, weather_risk: str, 
-                             crash_count: int) -> float:
-        """Calculate numerical risk score (0-100)."""
+                             crash_count: int, severity_score: float = 0) -> float:
+        """Calculate numerical risk score (0-100) with severity consideration."""
         # Base score by risk type
         base_scores = {
             'Normal': 20,
@@ -154,7 +188,10 @@ class RiskEventSynthesizer:
         # Crash history factor (logarithmic scaling)
         crash_factor = min(1.0 + (crash_count / 100.0), 1.5)
         
-        score = base * weather_factor * crash_factor
+        # Severity factor
+        severity_factor = min(1.0 + (severity_score / 1000.0), 1.3)
+        
+        score = base * weather_factor * crash_factor * severity_factor
         return min(round(score, 2), 100.0)
     
     def _generate_timestamp(self, time_category: str) -> str:
