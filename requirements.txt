@@ -1,0 +1,15 @@
+# Acoustic Shield Data Pipeline Requirements
+
+# AWS SDK
+boto3>=1.28.0
+sagemaker>=2.180.0
+
+# Data processing
+numpy>=1.24.0
+scipy>=1.11.0
+
+# HTTP requests
+requests>=2.31.0
+
+# JSON processing (standard library, but listed for documentation)
+# json - standard library
