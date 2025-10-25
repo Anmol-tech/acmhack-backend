@@ -36,46 +36,46 @@ class HotspotExtractor:
                 # Location
                 'latitude': coords[1] if len(coords) >= 2 else 0,
                 'longitude': coords[0] if len(coords) >= 2 else 0,
-                'street_a': (props.get('INTASTREETNAME') or props.get('street_name') or '').strip(),
-                'street_b': (props.get('INTBSTREETNAME') or props.get('street_b') or '').strip(),
+                'street_a': (props.get('INTASTREETNAME') or '').strip(),
+                'street_b': (props.get('INTBSTREETNAME') or '').strip(),
                 
                 # Crash characteristics
-                'collision_type': (props.get('COLLISIONTYPE') or props.get('collision_type') or 'Unknown').strip(),
-                'primary_factor': (props.get('PRIMARYCOLLISIONFACTOR') or props.get('primary_factor') or 'Unknown').strip(),
-                'vehicle_count': int(props.get('VEHICLECOUNT') or props.get('vehicle_count') or 0),
-                'narrative': (props.get('NARRATIVE') or props.get('narrative') or '').strip(),
+                'collision_type': (props.get('COLLISIONTYPE') or 'Unknown').strip(),
+                'primary_factor': (props.get('PRIMARYCOLLISIONFACTOR') or 'Unknown').strip(),
+                'vehicle_count': int(props.get('VEHICLECOUNT') or 0),
+                'narrative': (props.get('NARRATIVE') or '').strip(),
                 
                 # Environmental conditions
-                'weather': (props.get('WEATHER') or props.get('weather') or 'Clear').strip(),
-                'lighting': (props.get('LIGHTING') or props.get('lighting') or 'Daylight').strip(),
-                'road_surface': (props.get('ROADWAYSURFACE') or props.get('road_surface') or 'Dry').strip(),
-                'road_condition': (props.get('ROADWAYCONDITION') or props.get('road_condition') or 'No Unusual Conditions').strip(),
+                'weather': (props.get('WEATHER') or 'Clear').strip(),
+                'lighting': (props.get('LIGHTING') or 'Daylight').strip(),
+                'road_surface': (props.get('ROADWAYSURFACE') or 'Dry').strip(),
+                'road_condition': (props.get('ROADWAYCONDITION') or 'No Unusual Conditions').strip(),
                 
                 # Injuries and severity
-                'minor_injuries': int(props.get('MINORINJURIES') or props.get('minor_injuries') or 0),
-                'moderate_injuries': int(props.get('MODERATEINJURIES') or props.get('moderate_injuries') or 0),
-                'severe_injuries': int(props.get('SEVEREINJURIES') or props.get('severe_injuries') or 0),
-                'fatal_injuries': int(props.get('FATALINJURIES') or props.get('fatal_injuries') or 0),
+                'minor_injuries': int(props.get('MINORINJURIES') or 0),
+                'moderate_injuries': int(props.get('MODERATEINJURIES') or 0),
+                'severe_injuries': int(props.get('SEVEREINJURIES') or 0),
+                'fatal_injuries': int(props.get('FATALINJURIES') or 0),
                 
                 # Flags and violations
-                'speeding_flag': (props.get('SPEEDINGFLAG') or props.get('speeding_flag') or '').strip(),
-                'hit_and_run_flag': (props.get('HITANDRUNFLAG') or props.get('hit_and_run_flag') or '').strip(),
-                'driver_intoxicated': (props.get('VEHICLEDRIVERINTOXICATED') or props.get('driver_intoxicated') or '').strip(),
+                'speeding_flag': (props.get('SPEEDINGFLAG') or '').strip(),
+                'hit_and_run_flag': (props.get('HITANDRUNFLAG') or '').strip(),
+                'driver_intoxicated': (props.get('VEHICLEDRIVERINTOXICATED') or '').strip(),
                 
                 # Temporal data
-                'hour': int(props.get('HOUR') or props.get('hour') or 12),
-                'day_of_week': (props.get('DAYOFWEEKNAME') or props.get('day_of_week') or '').strip(),
-                'month': (props.get('MONTHNAME') or props.get('month') or '').strip(),
-                'year': int(props.get('YEAR') or props.get('year') or 2020),
+                'hour': int(props.get('HOUR') or 12),
+                'day_of_week': (props.get('DAYOFWEEKNAME') or '').strip(),
+                'month': (props.get('MONTHNAME') or '').strip(),
+                'year': int(props.get('YEAR') or 2020),
                 
                 # Infrastructure
-                'intersection_type': (props.get('INTERSECTIONTYPE') or props.get('intersection_type') or '').strip(),
-                'traffic_control': (props.get('TRAFFICCONTROL') or props.get('traffic_control') or 'No Controls Present').strip(),
-                'traffic_control_type': (props.get('INTTRAFFICCONTROLTYPE') or props.get('traffic_control_type') or '').strip(),
+                'intersection_type': (props.get('INTERSECTIONTYPE') or '').strip(),
+                'traffic_control': (props.get('TRAFFICCONTROL') or 'No Controls Present').strip(),
+                'traffic_control_type': (props.get('INTTRAFFICCONTROLTYPE') or '').strip(),
                 
                 # Additional context
-                'vehicle_damage': (props.get('VEHICLEDAMAGE') or props.get('vehicle_damage') or '').strip(),
-                'pedestrian_action': (props.get('PEDESTRIANACTION') or props.get('pedestrian_action') or 'No Pedestrians Involved').strip(),
+                'vehicle_damage': (props.get('VEHICLEDAMAGE') or '').strip(),
+                'pedestrian_action': (props.get('PEDESTRIANACTION') or 'No Pedestrians Involved').strip(),
             }
             records.append(record)
         return records
