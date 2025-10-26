@@ -183,6 +183,9 @@ class BedrockAudioGenerator:
         self.throttle_count = 0
         self.max_consecutive_throttles = 5
 
+        # Initialize empty parameter cache (will be populated dynamically)
+        self._param_cache = {}
+
         logger.info(f"Initialized Bedrock client in region: {self.region_name}")
         logger.info(f"Using model: {model} ({self.model_id})")
         logger.info(f"Rate limit delay: {rate_limit_delay}s between calls")
@@ -208,9 +211,6 @@ class BedrockAudioGenerator:
         cache_key = f"{risk_type}_{collision_type}_{road_condition}"
 
         # Check cache first (dramatically speeds up processing)
-        if not hasattr(self, "_param_cache"):
-            self._param_cache = {}
-
         if cache_key in self._param_cache:
             cached_params = self._param_cache[cache_key].copy()
             params.update(cached_params)
@@ -478,21 +478,50 @@ Format as a single detailed paragraph suitable for AudioLDM, MusicGen, or Stable
             return False
 
 
-def load_recipes(recipe_dir: str) -> List[Dict]:
-    """Load all recipe JSON files from directory."""
+def load_recipes(
+    recipe_dir: str, worker_index: int = 0, num_workers: int = 1
+) -> List[Dict]:
+    """
+    Load recipe JSON files from a directory, partitioned for this worker.
+
+    Args:
+        recipe_dir: Directory containing recipe JSON files
+        worker_index: Index of this worker (0-based)
+        num_workers: Total number of workers
+
+    Returns:
+        List of recipes assigned to this worker
+    """
     recipe_path = Path(recipe_dir)
-    recipes = []
+    all_recipes = []
 
-    for recipe_file in recipe_path.glob("*.json"):
+    # Load all recipe files
+    for json_file in sorted(
+        recipe_path.glob("*.json")
+    ):  # Sort for consistent partitioning
         try:
-            with open(recipe_file, "r") as f:
+            with open(json_file, "r") as f:
                 recipe = json.load(f)
-                recipes.append(recipe)
+                all_recipes.append(recipe)
         except Exception as e:
-            logger.error(f"Failed to load recipe {recipe_file}: {e}")
+            logger.error(f"Error loading {json_file}: {e}")
 
-    logger.info(f"Loaded {len(recipes)} recipes from {recipe_dir}")
-    return recipes
+    logger.info(f"Found {len(all_recipes)} total recipes in {recipe_dir}")
+
+    # Partition recipes for this worker
+    if num_workers > 1:
+        worker_recipes = [
+            recipe
+            for i, recipe in enumerate(all_recipes)
+            if i % num_workers == worker_index
+        ]
+        logger.info(
+            f"Worker {worker_index + 1}/{num_workers}: Processing {len(worker_recipes)} recipes ({len(worker_recipes)/len(all_recipes)*100:.1f}%)"
+        )
+        return worker_recipes
+    else:
+        logger.info("Single worker mode: Processing all recipes")
+        return all_recipes
 
 
 def upload_wav_to_s3(
@@ -859,9 +888,17 @@ def main():
     if args.no_ai:
         args.use_ai = False
 
+    # Detect SageMaker Processing worker information
+    worker_index = int(os.environ.get("CURRENT_HOST_INDEX", "0"))
+    num_workers = int(os.environ.get("SM_NUM_INSTANCES", "1"))
+
     logger.info("=" * 70)
     logger.info("🎵 BEDROCK AI AUDIO GENERATOR")
     logger.info("=" * 70)
+    if num_workers > 1:
+        logger.info(
+            f"Worker: {worker_index + 1} of {num_workers} (parallel processing)"
+        )
     logger.info(f"Recipe dir: {args.recipe_dir}")
     if args.s3_bucket:
         logger.info(f"Output: s3://{args.s3_bucket}/{args.s3_prefix}")
@@ -873,8 +910,8 @@ def main():
     logger.info(f"Region: {args.region or 'auto-detect'}")
     logger.info("=" * 70)
 
-    # Load recipes
-    recipes = load_recipes(args.recipe_dir)
+    # Load recipes (partitioned for this worker)
+    recipes = load_recipes(args.recipe_dir, worker_index, num_workers)
 
     if not recipes:
         logger.error("No recipes found!")
