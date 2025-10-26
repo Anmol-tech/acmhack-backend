@@ -184,7 +184,7 @@ def main():
     # Training arguments
     training_args = TrainingArguments(
         output_dir=args.output_data_dir,
-        eval_strategy="epoch",
+        evaluation_strategy="epoch",  # Changed from eval_strategy for transformers 4.28
         save_strategy="epoch",
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
