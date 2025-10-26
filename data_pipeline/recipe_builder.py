@@ -3,6 +3,7 @@ Audio recipe builder for Acoustic Shield training data.
 Creates audio generation specifications from risk events.
 """
 import logging
+import random
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)
@@ -51,12 +52,13 @@ class RecipeBuilder:
         """Initialize recipe builder."""
         pass
     
-    def build_recipes(self, risk_events: List[Dict]) -> List[Dict]:
+    def build_recipes(self, risk_events: List[Dict], recipes_per_event: int = 1) -> List[Dict]:
         """
         Build audio generation recipes from risk events.
         
         Args:
             risk_events: List of risk event dictionaries
+            recipes_per_event: Number of recipe variations to generate per event (default: 1)
             
         Returns:
             List of audio recipe dictionaries
@@ -64,16 +66,22 @@ class RecipeBuilder:
         recipes = []
         
         for event in risk_events:
-            recipe = self._create_recipe(event)
-            recipes.append(recipe)
+            # Generate multiple recipe variations per event
+            for variation_idx in range(recipes_per_event):
+                recipe = self._create_recipe(event, variation_idx)
+                recipes.append(recipe)
         
-        logger.info(f"Built {len(recipes)} audio recipes")
+        logger.info(f"Built {len(recipes)} audio recipes from {len(risk_events)} events ({recipes_per_event} per event)")
         return recipes
     
-    def _create_recipe(self, event: Dict) -> Dict:
+    def _create_recipe(self, event: Dict, variation_idx: int = 0) -> Dict:
         """Create a single audio recipe from a risk event with enhanced parameters."""
         risk_type = event.get('risk_type', 'Normal')
         audio_spec = self.AUDIO_SPECS.get(risk_type, self.AUDIO_SPECS['Normal']).copy()
+        
+        # Apply random variations for diversity
+        variation_factor = 1.0 + (variation_idx * 0.05)  # 0%, 5%, 10% variations
+        noise_factor = random.uniform(0.95, 1.05)  # Add small random noise
         
         # Modify audio parameters based on weather
         weather_conditions = event.get('weather_conditions', {})
@@ -86,8 +94,12 @@ class RecipeBuilder:
         
         # Adjust based on weather risk
         if weather_risk == 'high':
-            audio_spec['tire_noise'] = min(audio_spec['tire_noise'] * 1.2, 1.0)
-            audio_spec['ambient_level'] = min(audio_spec['ambient_level'] * 1.3, 1.0)
+            audio_spec['tire_noise'] = min(audio_spec['tire_noise'] * 1.2 * noise_factor, 1.0)
+            audio_spec['ambient_level'] = min(audio_spec['ambient_level'] * 1.3 * noise_factor, 1.0)
+        
+        # Apply variation factor to create diversity
+        audio_spec['engine_intensity'] = min(audio_spec['engine_intensity'] * variation_factor * noise_factor, 1.0)
+        audio_spec['tire_noise'] = min(audio_spec['tire_noise'] * variation_factor * noise_factor, 1.0)
         
         # Adjust based on crash characteristics
         crash_chars = event.get('crash_characteristics', {})
@@ -102,7 +114,7 @@ class RecipeBuilder:
         # Build recipe with folder structure
         recipe = {
             'event_id': event.get('event_id'),
-            'recipe_id': f"recipe_{event.get('event_id')}",
+            'recipe_id': f"recipe_{event.get('event_id')}_v{variation_idx}",
             'risk_type': risk_type,
             'risk_score': event.get('risk_score', 50),
             'audio_parameters': audio_spec,
@@ -116,13 +128,14 @@ class RecipeBuilder:
                 'road_condition': crash_chars.get('road_condition', 'Dry'),
             },
             'output': {
-                'filename': f"{event.get('event_id')}_{risk_type.lower()}.wav",
+                'filename': f"{event.get('event_id')}_v{variation_idx}_{risk_type.lower()}.wav",
                 'folder': risk_type,  # Organize by risk type folder
                 'format': 'wav',
                 'channels': 1
             },
             'metadata': {
                 'source_event': event.get('event_id'),
+                'variation_index': variation_idx,
                 'hotspot_rank': event.get('hotspot_rank'),
                 'crash_count': event.get('crash_count'),
                 'severity_score': event.get('severity_score', 0),
