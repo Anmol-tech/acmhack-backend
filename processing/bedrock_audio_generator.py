@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import random
+import io
 from pathlib import Path
 from typing import Dict, List
 
@@ -494,30 +495,83 @@ def load_recipes(recipe_dir: str) -> List[Dict]:
     return recipes
 
 
+def upload_wav_to_s3(
+    audio_data: np.ndarray,
+    sample_rate: int,
+    s3_key: str,
+    bucket: str,
+    region: str = None,
+) -> bool:
+    """
+    Upload WAV audio data directly to S3.
+
+    Args:
+        audio_data: Audio samples as numpy array
+        sample_rate: Audio sample rate
+        s3_key: S3 key (path) for the file
+        bucket: S3 bucket name
+        region: AWS region (optional)
+
+    Returns:
+        True if successful
+    """
+    try:
+        # Convert to 16-bit PCM
+        audio_int16 = (audio_data * 32767).astype(np.int16)
+
+        # Write to in-memory buffer
+        buffer = io.BytesIO()
+        wavfile.write(buffer, sample_rate, audio_int16)
+        buffer.seek(0)
+
+        # Upload to S3
+        s3_client = boto3.client("s3", region_name=region)
+        s3_client.put_object(
+            Bucket=bucket, Key=s3_key, Body=buffer.getvalue(), ContentType="audio/wav"
+        )
+
+        logger.debug(f"Uploaded to s3://{bucket}/{s3_key}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to upload to S3: {e}")
+        return False
+
+
 def generate_wav_files(
     recipes: List[Dict],
     output_dir: str,
     region_name: str = None,
     use_ai: bool = False,
     model: str = "claude-3.5-sonnet-v2",
+    s3_bucket: str = None,
+    s3_prefix: str = "train/",
 ):
     """
     Generate WAV audio files with optional Bedrock AI enhancement.
 
     Args:
         recipes: List of audio recipe dictionaries
-        output_dir: Directory for output WAV files
+        output_dir: Directory for output WAV files (local or ignored if s3_bucket provided)
         region_name: AWS region for Bedrock (optional)
         use_ai: Whether to use Bedrock AI to enhance parameters
         model: Bedrock model to use (default: claude-3.5-sonnet-v2)
+        s3_bucket: S3 bucket to upload files (if None, saves locally)
+        s3_prefix: S3 prefix/folder (default: train/)
     """
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    # Determine if we're using S3 or local storage
+    use_s3 = s3_bucket is not None
 
-    # Create folders for risk types
-    risk_types = ["Normal", "TireSkid", "EmergencyBraking", "CollisionImminent"]
-    for risk_type in risk_types:
-        (output_path / risk_type).mkdir(exist_ok=True)
+    if use_s3:
+        logger.info(f"Output mode: S3 (s3://{s3_bucket}/{s3_prefix})")
+    else:
+        logger.info(f"Output mode: Local ({output_dir})")
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        # Create folders for risk types
+        risk_types = ["Normal", "TireSkid", "EmergencyBraking", "CollisionImminent"]
+        for risk_type in risk_types:
+            (output_path / risk_type).mkdir(exist_ok=True)
 
     # Calculate per-instance rate limit with optimization
     # Bedrock has ~10 TPS limit, with aggressive caching we can increase parallelism
@@ -555,44 +609,74 @@ def generate_wav_files(
             filename = output_info.get("filename", f"audio_{idx:05d}.wav")
             folder = output_info.get("folder", "Normal")
 
-            # Save to risk-type folder
-            risk_folder = output_path / folder
-            wav_file = risk_folder / filename
+            # Prepare file path
+            if use_s3:
+                s3_key = f"{s3_prefix}{folder}/{filename}"
+                wav_file = None  # No local file needed
+            else:
+                risk_folder = output_path / folder
+                wav_file = risk_folder / filename
+                s3_key = None
 
-            # Generate WAV
+            # Generate audio data
+            params = recipe.get("audio_parameters", {})
+            sample_rate = params.get("sample_rate", 22050)
+
+            # Generate WAV with AI or direct synthesis
             if generator and use_ai:
                 try:
                     # Track if we used cache
                     cache_size_before = len(getattr(generator, "_param_cache", {}))
-                    success = generator.generate_wav_file(
-                        recipe, wav_file, use_ai_enhancement=True
-                    )
+
+                    # Get AI-enhanced parameters
+                    enhanced_params = generator.enhance_parameters(recipe)
+                    audio = synthesizer.generate_audio(enhanced_params)
+
                     cache_size_after = len(getattr(generator, "_param_cache", {}))
+
+                    # Upload to S3 or save locally
+                    if use_s3:
+                        success = upload_wav_to_s3(
+                            audio, sample_rate, s3_key, s3_bucket, region_name
+                        )
+                    else:
+                        audio_int16 = (audio * 32767).astype(np.int16)
+                        wavfile.write(str(wav_file), sample_rate, audio_int16)
+                        success = True
 
                     if success:
                         ai_enhanced += 1
                         if cache_size_after == cache_size_before:
                             cached += 1  # Used cached parameters
+
                 except Exception as e:
                     # Fallback to non-AI generation on any error
                     logger.warning(
                         f"AI enhancement failed for {filename}, using fallback: {e}"
                     )
-                    params = recipe.get("audio_parameters", {})
                     audio = synthesizer.generate_audio(params)
-                    audio_int16 = (audio * 32767).astype(np.int16)
-                    sample_rate = params.get("sample_rate", 22050)
-                    wavfile.write(str(wav_file), sample_rate, audio_int16)
-                    success = True
+
+                    if use_s3:
+                        success = upload_wav_to_s3(
+                            audio, sample_rate, s3_key, s3_bucket, region_name
+                        )
+                    else:
+                        audio_int16 = (audio * 32767).astype(np.int16)
+                        wavfile.write(str(wav_file), sample_rate, audio_int16)
+                        success = True
                     fallback += 1
             else:
                 # Direct synthesis without AI
-                params = recipe.get("audio_parameters", {})
                 audio = synthesizer.generate_audio(params)
-                audio_int16 = (audio * 32767).astype(np.int16)
-                sample_rate = params.get("sample_rate", 22050)
-                wavfile.write(str(wav_file), sample_rate, audio_int16)
-                success = True
+
+                if use_s3:
+                    success = upload_wav_to_s3(
+                        audio, sample_rate, s3_key, s3_bucket, region_name
+                    )
+                else:
+                    audio_int16 = (audio * 32767).astype(np.int16)
+                    wavfile.write(str(wav_file), sample_rate, audio_int16)
+                    success = True
 
             if success:
                 successful += 1
@@ -622,9 +706,31 @@ def generate_wav_files(
         )
 
     # Show distribution
-    for risk_type in risk_types:
-        count = len(list((output_path / risk_type).glob("*.wav")))
-        logger.info(f"  {risk_type}: {count} WAV files")
+    risk_types = ["Normal", "TireSkid", "EmergencyBraking", "CollisionImminent"]
+    if use_s3:
+        # Count files in S3
+        try:
+            s3_client = boto3.client("s3", region_name=region_name)
+            for risk_type in risk_types:
+                prefix = f"{s3_prefix}{risk_type}/"
+                response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=prefix)
+                count = len(
+                    [
+                        obj
+                        for obj in response.get("Contents", [])
+                        if obj["Key"].endswith(".wav")
+                    ]
+                )
+                logger.info(
+                    f"  {risk_type}: {count} WAV files in s3://{s3_bucket}/{prefix}"
+                )
+        except Exception as e:
+            logger.warning(f"Could not count S3 files: {e}")
+    else:
+        # Count local files
+        for risk_type in risk_types:
+            count = len(list((output_path / risk_type).glob("*.wav")))
+            logger.info(f"  {risk_type}: {count} WAV files")
 
 
 def generate_audio_specifications(
@@ -734,6 +840,18 @@ def main():
         choices=["claude-3.5-sonnet-v2", "claude-3.5-haiku", "nova-pro", "nova-lite"],
         help="Bedrock model to use (default: claude-3.5-sonnet-v2)",
     )
+    parser.add_argument(
+        "--s3-bucket",
+        type=str,
+        default=None,
+        help="S3 bucket to upload WAV files (e.g., acousticshield-ml). If not specified, saves locally.",
+    )
+    parser.add_argument(
+        "--s3-prefix",
+        type=str,
+        default="train/",
+        help="S3 prefix/folder for WAV files (default: train/)",
+    )
 
     args = parser.parse_args()
 
@@ -745,7 +863,10 @@ def main():
     logger.info("🎵 BEDROCK AI AUDIO GENERATOR")
     logger.info("=" * 70)
     logger.info(f"Recipe dir: {args.recipe_dir}")
-    logger.info(f"Output dir: {args.output_dir}")
+    if args.s3_bucket:
+        logger.info(f"Output: s3://{args.s3_bucket}/{args.s3_prefix}")
+    else:
+        logger.info(f"Output dir: {args.output_dir}")
     logger.info(f"AI Enhancement: {'✅ ENABLED' if args.use_ai else '⚠️  DISABLED'}")
     if args.use_ai:
         logger.info(f"Model: {args.model}")
@@ -766,9 +887,13 @@ def main():
         args.region,
         args.use_ai,
         model=args.model if args.use_ai else None,
+        s3_bucket=args.s3_bucket,
+        s3_prefix=args.s3_prefix,
     )
 
     logger.info("✅ WAV generation complete!")
+    if args.s3_bucket:
+        logger.info(f"📦 Files uploaded to s3://{args.s3_bucket}/{args.s3_prefix}")
 
 
 if __name__ == "__main__":
